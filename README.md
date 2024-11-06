@@ -13,7 +13,8 @@ Iyzico payment gateway for [Bagisto Laravel ecommerce](https://bagisto.com/)
 ## Installation
 
 ```
-composer require damalis/bagisto-iyzico
+composer require aghaeian/bagisto-iyzico
+
 ```
 
 - Run these commands below to complete the setup
