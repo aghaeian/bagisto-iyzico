@@ -13,6 +13,10 @@ Iyzico payment gateway for [Bagisto Laravel ecommerce](https://bagisto.com/)
 ## Installation
 
 ```
+composer remove aghaeian/bagisto-iyzico:dev-main
+```
+
+```
 composer require aghaeian/bagisto-iyzico
 ```
 
