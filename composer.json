@@ -1,0 +1,32 @@
+{
+	"name": "aghaeian/bagisto-iyzico",
+	"type": "library",
+	"description": "Iyzico payment gateway for bagisto",
+	"keywords": ["payment gateway", "payment", "bagisto", "iyzico", "iyzipay"],
+	"homepage": "https://github.com/damalis/bagisto-iyzico",
+	"license": "MIT",
+	"minimum-stability": "dev",
+	"authors": [
+		{
+			"name": "aghaeian",
+			"email": "aghaeian@gmail.com",
+			"homepage": "https://github.com/aghaeian"
+		}
+	],
+	"require": {
+		"php": ">=7.3"
+	},
+	"autoload": {
+		"psr-4": {
+			"Aghaeian\\Iyzico\\": "src/"
+		}
+	},
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Aghaeian\\Iyzico\\Providers\\IyzicoServiceProvider"
+      ],
+      "aliases": {}
+    }
+  }
+}
