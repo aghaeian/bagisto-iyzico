@@ -50,24 +50,6 @@ class IyzicoController extends Controller
         $this->invoiceRepository = $invoiceRepository;
     }
 
-    /**
-     * Checkout method for Iyzico payment process
-     *
-     * @param Request $request
-     * @return \Illuminate\View\View
-     */
-    public function checkout(Request $request)
-    {
-        // This view can handle additional logic if needed
-        return view('iyzico.checkout'); // Ensure this view exists
-    }
-
-    /**
-     * Checkout with Iyzico
-     *
-     * @param Request $request
-     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
-     */
     public function checkoutWithIyzico(Request $request)
     {   
         $cart = Cart::getCart();
