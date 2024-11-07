@@ -155,7 +155,9 @@ class IyzicoController extends Controller
             }
             Cart::deActivateCart();
             session()->flash('order_id', $order->id);
-            return redirect()->route('shop.checkout.onepage.success', $order);
+
+            // $order nesnesini geçmeden yönlendirme
+            return redirect()->route('shop.checkout.onepage.success');
         }
     }
 
