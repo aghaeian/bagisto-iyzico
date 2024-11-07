@@ -13,8 +13,7 @@ Route::group(['middleware' => ['web', 'theme', 'locale', 'currency']], function 
     Route::post('iyzico-payment', [
         IyzicoController::class, 'processPayment'
     ])->withoutMiddleware(VerifyCsrfToken::class)->name('iyzico.payment.process');
-
-    // Eski rota ismiyle ödeme formunu gösteren rota (hata veren kodlar için)
-    Route::get('iyzico-payment-checkout', [
-        IyzicoController::class, 'showPaymentForm'])->name('iyzico.payment.checkout');
 });
+
+// Başarı sayfası rotası
+Route::get('/checkout/success', 'Webkul\Shop\Http\Controllers\CheckoutController@success')->name('shop.checkout.onepage.success');
