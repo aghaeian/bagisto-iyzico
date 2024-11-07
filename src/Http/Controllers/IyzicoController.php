@@ -61,6 +61,19 @@ class IyzicoController extends Controller
      */
     public function processPayment(Request $request)
     {
+        // Form verilerini alıyoruz
+        $cardHolderName = $request->input('card_holder_name');
+        $cardNumber = $request->input('card_number');
+        $expireMonth = $request->input('expire_month');
+        $expireYear = $request->input('expire_year');
+        $cvv = $request->input('cvv');
+
+        // Form verilerinin boş olup olmadığını kontrol edin
+        if (!$cardHolderName || !$cardNumber || !$expireMonth || !$expireYear || !$cvv) {
+            session()->flash('error', 'Lütfen tüm alanları doldurunuz.');
+            return redirect()->back();
+        }
+
         $cart = Cart::getCart();
         $cartbillingAddress = $cart->billing_address;
         $checkoutToken = $request->session()->get('_token');
@@ -81,11 +94,11 @@ class IyzicoController extends Controller
 
         // Ödeme kartı bilgilerini ayarlama
         $paymentCard = new PaymentCard();
-        $paymentCard->setCardHolderName($request->input('card_holder_name'));
-        $paymentCard->setCardNumber($request->input('card_number'));
-        $paymentCard->setExpireMonth($request->input('expire_month'));
-        $paymentCard->setExpireYear($request->input('expire_year'));
-        $paymentCard->setCvc($request->input('cvv'));
+        $paymentCard->setCardHolderName($cardHolderName);
+        $paymentCard->setCardNumber($cardNumber);
+        $paymentCard->setExpireMonth($expireMonth);
+        $paymentCard->setExpireYear($expireYear);
+        $paymentCard->setCvc($cvv);
         $paymentCard->setRegisterCard(0);
         $paymentRequest->setPaymentCard($paymentCard);
 
@@ -156,7 +169,7 @@ class IyzicoController extends Controller
             Cart::deActivateCart();
             session()->flash('order_id', $order->id);
 
-            // $order nesnesini geçmeden yönlendirme
+            // Yönlendirme
             return redirect()->route('shop.checkout.onepage.success');
         }
     }
