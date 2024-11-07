@@ -9,17 +9,15 @@ use Webkul\Sales\Repositories\InvoiceRepository;
 use Illuminate\Http\Request;
 
 use Aghaeian\Iyzico\Http\Controllers\IyzicoConfig;
+use Iyzipay\Model\Payment;
+use Iyzipay\Model\PaymentCard;
+use Iyzipay\Request\CreatePaymentRequest;
+use Iyzipay\Model\Locale;
+use Iyzipay\Model\PaymentGroup;
+use Iyzipay\Model\Buyer;
 use Iyzipay\Model\Address;
 use Iyzipay\Model\BasketItem;
 use Iyzipay\Model\BasketItemType;
-use Iyzipay\Model\Buyer;
-use Iyzipay\Model\CheckoutFormInitialize;
-use Iyzipay\Model\Locale;
-use Iyzipay\Model\PaymentGroup;
-use Iyzipay\Options;
-use Iyzipay\Model\CheckoutForm;
-use Iyzipay\Request\RetrieveCheckoutFormRequest;
-use Iyzipay\Request\CreateCheckoutFormInitializeRequest;
 
 class IyzicoController extends Controller
 {
@@ -50,26 +48,48 @@ class IyzicoController extends Controller
         $this->invoiceRepository = $invoiceRepository;
     }
 
-    public function checkoutWithIyzico(Request $request)
-    {   
+    /**
+     * Ödeme formunu gösterir.
+     */
+    public function showPaymentForm()
+    {
+        return view('iyzico::payment-form');
+    }
+
+    /**
+     * Ödeme işlemini gerçekleştirir.
+     */
+    public function processPayment(Request $request)
+    {
         $cart = Cart::getCart();
         $cartbillingAddress = $cart->billing_address;
-
         $checkoutToken = $request->session()->get('_token');
 
-        /** @var IyzicoApiClient $api */				
-        # create request class
-        $api = new CreateCheckoutFormInitializeRequest();
-        $api->setLocale($request->getLocale());
-        $api->setConversationId($checkoutToken);
+        // Ödeme isteğini oluşturma
+        $paymentRequest = new CreatePaymentRequest();
+        $paymentRequest->setLocale(Locale::TR);
+        $paymentRequest->setConversationId($checkoutToken);
+        $paymentRequest->setPrice(number_format((float)$cart->sub_total, 2, '.', ''));
+        $paymentRequest->setPaidPrice(number_format((float)$cart->grand_total, 2, '.', ''));
         $currency = $cart->cart_currency_code;
         if ($currency == "TRY") $currency = "TL";
-        $api->setCurrency(constant('Iyzipay\Model\Currency::' . $currency));
-        $api->setBasketId($cart->id);
-        $api->setPaymentGroup(PaymentGroup::PRODUCT);
-        $api->setCallbackUrl(request()->getSchemeAndHttpHost() . "/iyzico-payment-callback/" . $checkoutToken);
-        $api->setEnabledInstallments([3, 6, 9, 12]);
+        $paymentRequest->setCurrency(constant('Iyzipay\Model\Currency::' . $currency));
+        $paymentRequest->setInstallment(1);
+        $paymentRequest->setBasketId($cart->id);
+        $paymentRequest->setPaymentChannel('WEB');
+        $paymentRequest->setPaymentGroup(PaymentGroup::PRODUCT);
 
+        // Ödeme kartı bilgilerini ayarlama
+        $paymentCard = new PaymentCard();
+        $paymentCard->setCardHolderName($request->input('card_holder_name'));
+        $paymentCard->setCardNumber($request->input('card_number'));
+        $paymentCard->setExpireMonth($request->input('expire_month'));
+        $paymentCard->setExpireYear($request->input('expire_year'));
+        $paymentCard->setCvc($request->input('cvv'));
+        $paymentCard->setRegisterCard(0);
+        $paymentRequest->setPaymentCard($paymentCard);
+
+        // Alıcı bilgilerini ayarlama
         $buyer = new Buyer();
         if ($cartbillingAddress->customer_id) {
             $buyer->setId($cartbillingAddress->customer_id);
@@ -80,96 +100,65 @@ class IyzicoController extends Controller
         $buyer->setSurname($cartbillingAddress->last_name);
         $buyer->setGsmNumber($cartbillingAddress->phone);
         $buyer->setEmail($cartbillingAddress->email);
-        $buyer->setIdentityNumber("74300864791");
-        $buyer->setRegistrationAddress($cartbillingAddress->address);
+        $buyer->setIdentityNumber("74300864791"); // Gerçek bir TCKN kullanılmalıdır
+        $buyer->setRegistrationAddress($cartbillingAddress->address1);
         $buyer->setIp($request->ip());
         $buyer->setCity($cartbillingAddress->city);
         $buyer->setCountry($cartbillingAddress->country);
         $buyer->setZipCode($cartbillingAddress->postcode);
-        $api->setBuyer($buyer);
+        $paymentRequest->setBuyer($buyer);
 
+        // Fatura adresini ayarlama
+        $billingAddress = new Address();
+        $billingAddress->setContactName($cartbillingAddress->first_name . ' ' . $cartbillingAddress->last_name);
+        $billingAddress->setCity($cartbillingAddress->city);
+        $billingAddress->setCountry($cartbillingAddress->country);
+        $billingAddress->setAddress($cartbillingAddress->address1);
+        $billingAddress->setZipCode($cartbillingAddress->postcode);
+        $paymentRequest->setBillingAddress($billingAddress);
+
+        // Kargo adresini ayarlama
         $shippingAddress = new Address();
         $shippingAddress->setContactName($cartbillingAddress->first_name . ' ' . $cartbillingAddress->last_name);
         $shippingAddress->setCity($cartbillingAddress->city);
         $shippingAddress->setCountry($cartbillingAddress->country);
-        $shippingAddress->setAddress($cartbillingAddress->address);
+        $shippingAddress->setAddress($cartbillingAddress->address1);
         $shippingAddress->setZipCode($cartbillingAddress->postcode);
-        $api->setShippingAddress($shippingAddress);
+        $paymentRequest->setShippingAddress($shippingAddress);
 
-        $billingAddress = new Address();
-        $billingAddress->setContactName($cartbillingAddress->name);
-        $billingAddress->setCity($cartbillingAddress->city);
-        $billingAddress->setCountry($cartbillingAddress->country);
-        $billingAddress->setAddress($cartbillingAddress->address);
-        $billingAddress->setZipCode($cartbillingAddress->postcode);
-        $api->setBillingAddress($billingAddress);
-
+        // Sepet öğelerini ayarlama
         $basketItems = [];
-        for ($i = 0; $i < $cart->items_count; $i++) {
-            $BasketItem = new BasketItem();
-            $BasketItem->setId($cart->items[$i]->id);
-            $BasketItem->setName($cart->items[$i]->name);
-            $BasketItem->setCategory1($cart->items[$i]->type);
-            $BasketItem->setCategory2('category 2');
-            $BasketItem->setItemType(BasketItemType::VIRTUAL);
-            $BasketItem->setPrice(number_format((float)$cart->items[$i]->base_total, 2, '.', ''));
-            $basketItems[$i] = $BasketItem;
+        foreach ($cart->items as $item) {
+            $basketItem = new BasketItem();
+            $basketItem->setId($item->id);
+            $basketItem->setName($item->name);
+            $basketItem->setCategory1($item->type);
+            $basketItem->setItemType(BasketItemType::PHYSICAL); // Ürünün türüne göre ayarlayın
+            $basketItem->setPrice(number_format((float)$item->base_total, 2, '.', ''));
+            $basketItems[] = $basketItem;
         }
+        $paymentRequest->setBasketItems($basketItems);
 
-        $api->setBasketItems($basketItems);
-        $api->setPrice(number_format((float)$cart->sub_total, 2, '.', ''));
-        $api->setPaidPrice(number_format((float)$cart->grand_total, 2, '.', ''));
+        // Ödeme isteğini gerçekleştirme
+        $payment = Payment::create($paymentRequest, (new IyzicoConfig)->options());
 
-        # make request
-        $checkoutFormInitialize = CheckoutFormInitialize::create($api, (new IyzicoConfig)->options());
-
-        if ($checkoutFormInitialize->getStatus() != "success") {
-            session()->flash('error', $checkoutFormInitialize->geterrorCode() . ", message: " . $checkoutFormInitialize->geterrorMessage());
-            return redirect()->route('shop.checkout.cart.index'); 
-        } else {					
-            $paymentcontent_msg = $checkoutFormInitialize->getCheckoutFormContent();        
-            return view('iyzico::iyzico-payment-callback')->with(compact('paymentcontent_msg'));
+        if ($payment->getStatus() != "success") {
+            session()->flash('error', $payment->getErrorCode() . ", message: " . $payment->getErrorMessage());
+            return redirect()->route('shop.checkout.cart.index');
+        } else {
+            // Siparişi oluşturma ve yönlendirme
+            $data = (new OrderResource($cart))->jsonSerialize();
+            $order = $this->orderRepository->create($data);
+            $this->orderRepository->update(['status' => 'processing'], $order->id);
+            if ($order->canInvoice()) {
+                $this->invoiceRepository->create($this->prepareInvoiceData($order));
+            }
+            Cart::deActivateCart();
+            session()->flash('order_id', $order->id);
+            return redirect()->route('shop.checkout.onepage.success');
         }
     }
 
-    /**
-     * Payment callback
-     */
-    public function paymentCallback(Request $request)
-    {   
-        try {
-            /**
-             * @var IyzicoApiClient $api
-             */
-            $api = new RetrieveCheckoutFormRequest();
-            $api->setLocale($request->getLocale());
-            $api->setConversationId($request->session()->get('_token'));
-            $api->setToken($request->input('token'));
-
-            # make request
-            $checkoutForm = CheckoutForm::retrieve($api, (new IyzicoConfig)->options());
-
-            if (strtolower($checkoutForm->getPaymentStatus()) !== \Iyzipay\Model\Status::SUCCESS) {
-                session()->flash('error', 'Iyzico payment either cancelled or transaction failure.');
-                return redirect()->route('shop.checkout.cart.index');                
-            }
-        } catch (SignatureVerificationError $e) {
-            session()->flash('error', 'Iyzico Error : ' . $e->getMessage());
-            return redirect()->route('shop.checkout.cart.index');
-        }
-
-        $cart = Cart::getCart();
-        $data = (new OrderResource($cart))->jsonSerialize();
-        $order = $this->orderRepository->create($data);
-        $this->orderRepository->update(['status' => 'processing'], $order->id);
-        if ($order->canInvoice()) {
-            $this->invoiceRepository->create($this->prepareInvoiceData($order));
-        }
-        Cart::deActivateCart();
-        session()->flash('order_id', $order->id);
-        return redirect()->route('shop.checkout.onepage.success');
-    }	
-    
     /**
      * Prepares order's invoice data for creation.
      *
